@@ -16,4 +16,8 @@ defmodule Libsql.Connection do
         err
     end
   end
+
+  def query_blocking(%__MODULE__{} = conn, statement, params) do
+    Libsql.Native.query_on_conn(conn, statement, params)
+  end
 end

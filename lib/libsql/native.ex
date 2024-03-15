@@ -6,6 +6,7 @@ defmodule Libsql.Native do
 
   def new_local(_path), do: nif_error()
   def new_remote(_url, _auth_token), do: nif_error()
+  def new_remote_replica(_path, _url, _auth_token), do: nif_error()
 
   def open_db(_db), do: nif_error()
 

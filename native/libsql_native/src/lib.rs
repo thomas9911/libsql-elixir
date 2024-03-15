@@ -1,5 +1,7 @@
 use libsql::Builder;
 use rustler::{Binary, Decoder, Encoder, LocalPid, NifStruct, OwnedEnv, ResourceArc, Term};
+use tracing::{info, Level};
+use tracing_subscriber::{self, util::SubscriberInitExt};
 
 pub mod task;
 
@@ -97,6 +99,7 @@ fn add(a: i64, b: i64) -> i64 {
 
 #[rustler::nif]
 fn new_local(path: &str) -> Result<Database, Error> {
+
     let libsql_db = task::block_on(Builder::new_local(path).build()).map_err(|e| e.to_string())?;
 
     Ok(Database {
@@ -115,7 +118,21 @@ fn new_remote(url: String, auth_token: String) -> Result<Database, Error> {
 }
 
 #[rustler::nif]
+fn new_remote_replica(path: &str, url: String, auth_token: String) -> Result<Database, Error> {
+    let libsql_db =
+        task::block_on(Builder::new_remote_replica(path, url, auth_token).build()).map_err(|e| e.to_string())?;
+
+    Ok(Database {
+        database: ResourceArc::new(InnerDatabase(libsql_db)),
+    })
+}
+
+#[rustler::nif]
 fn open_db(database: Database) -> Result<Connection, Error> {
+    // tracing_subscriber::fmt()
+    //     .with_max_level(Level::TRACE)
+    //     .try_init().ok();
+
     let libsql_conn = database.database.0.connect().map_err(|e| e.to_string())?;
     Ok(Connection {
         connection: ResourceArc::new(InnerConnection(libsql_conn)),
@@ -220,6 +237,7 @@ rustler::init!(
         add,
         new_local,
         new_remote,
+        new_remote_replica,
         open_db,
         query_on_conn,
         query_on_conn_callback
