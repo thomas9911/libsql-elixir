@@ -9,7 +9,7 @@ static TOKIO: Lazy<Runtime> = Lazy::new(|| {
     Builder::new_multi_thread()
         .enable_all()
         .build()
-        .expect("OpenDAL.Native: Failed to start tokio runtime")
+        .expect("Libsql.Native: Failed to start tokio runtime")
 });
 
 pub fn spawn<T>(task: T) -> JoinHandle<T::Output>

@@ -83,4 +83,59 @@ defmodule LibsqlTest do
        ]
      }} = Libsql.Connection.query(conn, "select * from movies limit 100", [])
   end
+
+  test "new remote db" do
+    {:ok, db} = Libsql.Database.new_remote("http://127.0.0.1:8080", "")
+    {:ok, conn} = Libsql.Database.connection(db)
+
+    {:ok, %Libsql.Result{last_insert_id: 0}} = Libsql.Connection.query(conn, @drop_table, [])
+    {:ok, %Libsql.Result{last_insert_id: 0}} = Libsql.Connection.query(conn, @create_table, [])
+
+    {:ok, %Libsql.Result{last_insert_id: _}} =
+      Libsql.Connection.query(conn, @insert_data, [
+        "logging a rocket",
+        "PG-13",
+        "faced with the prospect of having to workaround a solution to data distribution, a software engineer forks his favorite embedded database",
+        1
+      ])
+
+    {:ok, %Libsql.Result{last_insert_id: _}} =
+      Libsql.Connection.query(conn, @insert_data, [
+        "Cheese its",
+        "PG-13",
+        "Cheese its everywhere!!",
+        1
+      ])
+
+    {:ok,
+     %Libsql.Result{
+       last_insert_id: _,
+       num_rows: 2,
+       columns: [
+         "id",
+         "title",
+         "year",
+         "rated",
+         "run_time",
+         "plot",
+         "genres",
+         "poster",
+         "watched"
+       ],
+       rows: [
+         [
+           1,
+           "logging a rocket",
+           2023,
+           "PG-13",
+           "120 min",
+           "faced with the prospect of having to workaround a solution to data distribution, a software engineer forks his favorite embedded database",
+           nil,
+           nil,
+           1
+         ],
+         [2, "Cheese its", 2023, "PG-13", "120 min", "Cheese its everywhere!!", nil, nil, 1]
+       ]
+     }} = Libsql.Connection.query(conn, "select * from movies limit 100", [])
+  end
 end

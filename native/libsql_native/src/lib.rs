@@ -5,13 +5,13 @@ pub mod task;
 
 type Error = String;
 
-#[derive(NifStruct, Clone)]
+#[derive(NifStruct, Clone, Debug)]
 #[module = "Libsql.Result"]
 struct ResultStruct {
     columns: Option<Vec<String>>,
     last_insert_id: Option<i64>,
     num_rows: Option<usize>,
-    rows: Option<Vec<Vec<Value>>>
+    rows: Option<Vec<Vec<Value>>>,
 }
 
 #[derive(NifStruct, Clone)]
@@ -105,6 +105,16 @@ fn new_local(path: &str) -> Result<Database, Error> {
 }
 
 #[rustler::nif]
+fn new_remote(url: String, auth_token: String) -> Result<Database, Error> {
+    let libsql_db =
+        task::block_on(Builder::new_remote(url, auth_token).build()).map_err(|e| e.to_string())?;
+
+    Ok(Database {
+        database: ResourceArc::new(InnerDatabase(libsql_db)),
+    })
+}
+
+#[rustler::nif]
 fn open_db(database: Database) -> Result<Connection, Error> {
     let libsql_conn = database.database.0.connect().map_err(|e| e.to_string())?;
     Ok(Connection {
@@ -114,12 +124,12 @@ fn open_db(database: Database) -> Result<Connection, Error> {
 
 #[rustler::nif]
 fn query_on_conn<'a>(
-    conn: Connection,
+    connection: Connection,
     statement: String,
     params: Vec<Value>,
 ) -> Result<ResultStruct, Error> {
     let res: libsql::Result<_> = task::block_on(async move {
-        let conn = conn.connection;
+        let conn = connection.connection;
         let mut query_results: libsql::Rows = conn.0.query(&statement, params).await?;
 
         let column_count: usize = query_results.column_count().try_into().unwrap();
@@ -141,12 +151,13 @@ fn query_on_conn<'a>(
             data.push(row_data)
         }
 
-        Ok(ResultStruct{
+        let out = Ok(ResultStruct {
             num_rows: Some(data.len()),
             rows: Some(data),
             columns: Some(columns),
             last_insert_id: Some(conn.0.last_insert_rowid()),
-        })
+        });
+        out
     });
 
     res.map_err(|e| e.to_string())
@@ -154,7 +165,7 @@ fn query_on_conn<'a>(
 
 rustler::init!(
     "Elixir.Libsql.Native",
-    [add, new_local, open_db, query_on_conn],
+    [add, new_local, new_remote, open_db, query_on_conn],
     load = load
 );
 
