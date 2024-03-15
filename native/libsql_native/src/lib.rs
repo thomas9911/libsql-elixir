@@ -1,5 +1,5 @@
 use libsql::Builder;
-use rustler::{Binary, Decoder, Encoder, NifStruct, ResourceArc, Term};
+use rustler::{Binary, Decoder, Encoder, LocalPid, NifStruct, OwnedEnv, ResourceArc, Term};
 
 pub mod task;
 
@@ -163,9 +163,67 @@ fn query_on_conn<'a>(
     res.map_err(|e| e.to_string())
 }
 
+#[rustler::nif]
+fn query_on_conn_callback<'a>(
+    connection: Connection,
+    statement: String,
+    params: Vec<Value>,
+    pid: LocalPid,
+) -> Result<(), Error> {
+    let _: tokio::task::JoinHandle<libsql::Result<()>> = task::spawn(async move {
+        let mut local_env = OwnedEnv::new();
+        let conn = connection.connection;
+        let mut query_results: libsql::Rows = conn.0.query(&statement, params).await?;
+
+        let column_count: usize = query_results
+            .column_count()
+            .try_into()
+            .expect("i32 but count should be positive");
+
+        let mut columns = Vec::with_capacity(column_count);
+        for idx in 0..column_count {
+            let name = query_results
+                .column_name(idx.try_into().expect("before this was already i32"))
+                .unwrap_or("");
+            columns.push(name.to_string())
+        }
+
+        let mut data = Vec::new();
+        while let Ok(Some(row)) = query_results.next().await {
+            let mut row_data = Vec::with_capacity(columns.len());
+            for (idx, _) in columns.iter().enumerate() {
+                row_data.push(row.get_value(idx as i32).map(|d| d.into())?)
+            }
+            data.push(row_data)
+        }
+
+        let out: Result<ResultStruct, ()> = Ok(ResultStruct {
+            num_rows: Some(data.len()),
+            rows: Some(data),
+            columns: Some(columns),
+            last_insert_id: Some(conn.0.last_insert_rowid()),
+        });
+
+        local_env
+            .send_and_clear(&pid, |_| out)
+            .expect("why does sending error?");
+
+        Ok(())
+    });
+
+    Ok(())
+}
+
 rustler::init!(
     "Elixir.Libsql.Native",
-    [add, new_local, new_remote, open_db, query_on_conn],
+    [
+        add,
+        new_local,
+        new_remote,
+        open_db,
+        query_on_conn,
+        query_on_conn_callback
+    ],
     load = load
 );
 

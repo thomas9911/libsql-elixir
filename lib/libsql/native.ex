@@ -10,6 +10,7 @@ defmodule Libsql.Native do
   def open_db(_db), do: nif_error()
 
   def query_on_conn(_conn, _statement, _params), do: nif_error()
+  def query_on_conn_callback(_conn, _statement, _params, _pid), do: nif_error()
 
   defp nif_error do
     :erlang.nif_error(:nif_not_loaded)

@@ -1,7 +1,19 @@
 defmodule Libsql.Connection do
   defstruct [:connection]
 
-  def query(%__MODULE__{} = conn, statement, params) do
-    Libsql.Native.query_on_conn(conn, statement, params)
+  @default_timeout 5_000
+
+  def query(%__MODULE__{} = conn, statement, params, timeout \\ @default_timeout) do
+    case Libsql.Native.query_on_conn_callback(conn, statement, params, self()) do
+      {:ok, _} ->
+        receive do
+          data -> data
+        after
+          timeout -> {:error, :timeout}
+        end
+
+      err ->
+        err
+    end
   end
 end
